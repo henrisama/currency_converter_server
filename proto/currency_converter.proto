@@ -1,0 +1,27 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "github.com/henrisama/currency_converter_server/proto";
+
+import "google/api/annotations.proto";
+
+message ConvertRequest {
+	string from = 1;
+	string to = 2;
+}
+
+message ConvertResponse {
+	int64 timestamp = 1;
+	string from_name = 2;
+	string to_name = 3;
+	double value = 4;
+}
+
+service Converter {
+	rpc Convert(ConvertRequest) returns(ConvertResponse) {
+		option (google.api.http) = {
+			post: "/v1/converter/convert"
+			body: "*"
+		};
+	}
+}
