@@ -2,17 +2,60 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"sync"
 
 	pb "github.com/henrisama/currency_converter_server/proto"
 )
 
 type server struct {
+	client    *http.Client
+	appID     string
 	mu        *sync.RWMutex
 	timestamp int64
 	rates     map[string]float64
 	pb.UnimplementedConverterServer
+}
+
+func newServer(appID string, client *http.Client) *server {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &server{
+		client: client,
+		appID:  appID,
+		mu:     new(sync.RWMutex),
+		rates:  make(map[string]float64),
+	}
+}
+
+func (s *server) fetchRates(ctx context.Context) error {
+	const base = "USD"
+	urlFmt := "https://openexchangerates.org/api/latest.json?app_id=%s&base=%s"
+	url := fmt.Sprintf(urlFmt, s.appID, base)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer rsp.Body.Close()
+	data, err := ioutil.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
+	response := new(Response)
+	json.Unmarshal(data, response)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.timestamp = response.Timestamp
+	s.rates = response.Rates
+	return nil
 }
 
 func (s *server) getPair(c1, c2 string) (float64, float64, error) {

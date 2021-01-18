@@ -1,14 +1,11 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"os"
-	"sync"
 
 	pb "github.com/henrisama/currency_converter_server/proto"
 	"google.golang.org/grpc"
@@ -33,23 +30,7 @@ func getenv(key string) string {
 
 func main() {
 	appID := getenv("APP_ID")
-	const base = "USD"
-
-	urlFmt := "https://openexchangerates.org/api/latest.json?app_id=%s&base=%s"
-	url := fmt.Sprintf(urlFmt, appID, base)
-	rsp, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rsp.Body.Close()
-	data, err := ioutil.ReadAll(rsp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("%s", data)
-
-	response := new(Response)
-	json.Unmarshal(data, response)
+	ctx := context.Background()
 
 	port := 9090
 	addr := fmt.Sprintf("localhost:%d", port)
@@ -59,11 +40,11 @@ func main() {
 	}
 	log.Printf("Listening on: %s...", addr)
 
-	s := &server{
-		mu:        new(sync.RWMutex),
-		timestamp: response.Timestamp,
-		rates:     response.Rates,
+	s := newServer(appID, nil)
+	if err = s.fetchRates(ctx); err != nil {
+		log.Fatal(err)
 	}
+
 	srv := grpc.NewServer()
 	pb.RegisterConverterServer(srv, s)
 	reflection.Register(srv)
